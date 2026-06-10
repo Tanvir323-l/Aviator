@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Aviator Game</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+body { background: #1a1a2e; font-family: 'Segoe UI', Tahoma, sans-serif; color: #fff; overflow-x: hidden; min-height: 100vh; }
+
+.top-bar { background: #16213e; padding: 10px 15px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #0f3460; }
+.balance-display { display: flex; align-items: center; gap: 8px; background: linear-gradient(135deg, #f7971e, #ffd200); padding: 8px 20px; border-radius: 25px; font-weight: bold; font-size: 16px; color: #000; }
+
+.aviator-header { display: flex; justify-content: space-between; align-items: center; padding: 10px 15px; background: #0d1b2a; }
+.aviator-logo { font-size: 24px; font-weight: bold; font-style: italic; color: #e74c3c; text-shadow: 0 0 10px rgba(231, 76, 60, 0.5); }
+.balance-bdt { color: #2ecc71; font-size: 14px; font-weight: bold; }
+
+.history-bar { display: flex; gap: 8px; padding: 8px 10px; overflow-x: auto; background: #0d1b2a; scrollbar-width: none; }
+.history-bar::-webkit-scrollbar { display: none; }
+.history-item { padding: 4px 10px; border-radius: 15px; font-size: 12px; font-weight: bold; white-space: nowrap; }
+.history-item.low { background: rgba(52, 152, 219, 0.2); color: #3498db; }
+.history-item.medium { background: rgba(155, 89, 182, 0.2); color: #9b59b6; }
+.history-item.high { background: rgba(46, 204, 113, 0.2); color: #2ecc71; }
+
+.game-area { position: relative; width: 100%; height: 320px; background: #0a0a0a; overflow: hidden; }
+.rays { position: absolute; bottom: 0; left: 0; width: 100%; height: 100%; overflow: hidden; }
+.ray { position: absolute; bottom: 0; left: 0; width: 2px; height: 600px; background: linear-gradient(to top, rgba(255,255,255,0.08), transparent); transform-origin: bottom left; }
+
+.multiplier-display { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 72px; font-weight: 900; color: #fff; text-shadow: 0 0 30px rgba(255,255,255,0.3); z-index: 10; transition: color 0.3s, opacity 0.3s; }
+.multiplier-display.hidden { opacity: 0; visibility: hidden; }
+.multiplier-display.crashed { color: #e74c3c; text-shadow: 0 0 30px rgba(231, 76, 60, 0.5); animation: crashShake 0.5s ease-in-out; }
+.multiplier-display.flying { color: #fff; opacity: 1; visibility: visible; }
+
+@keyframes crashShake {
+    0%, 100% { transform: translate(-50%, -50%); }
+    25% { transform: translate(-48%, -52%); }
+    50% { transform: translate(-52%, -48%); }
+    75% { transform: translate(-49%, -51%); }
+}
+
+.countdown-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.7); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 15; }
+.countdown-overlay.hidden { display: none; }
+.countdown-label { font-size: 18px; color: #aaa; margin-bottom: 10px; }
+.countdown-timer { font-size: 80px; font-weight: 900; color: #f39c12; text-shadow: 0 0 40px rgba(243, 156, 18, 0.6); animation: pulse 1s ease-in-out infinite; }
+.countdown-sublabel { font-size: 16px; color: #2ecc71; margin-top: 10px; font-weight: bold; }
+.countdown-sublabel.urgent { color: #e74c3c; animation: blink 0.5s ease-in-out infinite; }
+
+@keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.1); } }
+@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+.countdown-progress { position: absolute; bottom: 0; left: 0; height: 4px; background: linear-gradient(90deg, #2ecc71, #f39c12, #e74c3c); z-index: 16; transition: width 1s linear; }
+.airplane { position: absolute; z-index: 5; transition: left 0.05s linear, bottom 0.05s linear; pointer-events: none; }
+.airplane svg { width: 60px; height: auto; display: block; fill: #e74c3c; filter: drop-shadow(0 0 10px rgba(231, 76, 60, 0.9)); }
+.airplane.flying svg { animation: planeFloat 1s ease-in-out infinite; }
+@keyframes planeFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+
+.trail-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 3; }
+
+.betting-section { padding: 10px; }
+.bet-panel { background: #1e2a3a; border-radius: 12px; padding: 12px; border: 1px solid #2a3a4a; }
+.bet-panel-body { display: flex; gap: 10px; align-items: stretch; }
+.bet-controls { flex: 1; display: flex; flex-direction: column; gap: 8px; }
+.amount-display { display: flex; align-items: center; justify-content: center; gap: 10px; }
+.amount-btn { width: 36px; height: 36px; border-radius: 50%; border: 2px solid #3a4a5a; background: #2a3a4a; color: #fff; font-size: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.amount-value { font-size: 22px; font-weight: bold; min-width: 80px; text-align: center; }
+.quick-amounts { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.quick-amount-btn { padding: 8px; border: 1px solid #3a4a5a; border-radius: 8px; background: #2a3a4a; color: #ccc; font-size: 13px; font-weight: bold; cursor: pointer; text-align: center; }
+
+.bet-button { flex: 1; min-height: 80px; border: none; border-radius: 12px; font-size: 18px; font-weight: bold; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; }
+.bet-button.bet-green { background: linear-gradient(135deg, #2ecc71, #27ae60); color: #fff; box-shadow: 0 4px 15px rgba(46, 204, 113, 0.4); }
+.bet-button.bet-orange { background: linear-gradient(135deg, #f39c12, #e67e22); color: #fff; }
+.bet-button.bet-red { background: linear-gradient(135deg, #e74c3c, #c0392b); color: #fff; }
+.bet-button.bet-gray { background: linear-gradient(135deg, #555, #444); color: #aaa; cursor: not-allowed; }
+.bet-button .bet-label { font-size: 14px; opacity: 0.9; }
+.bet-button .bet-amount-text { font-size: 18px; }
+
+.bets-list { max-height: 200px; overflow-y: auto; padding: 10px; background: #0d1b2a; }
+.bet-row { display: flex; justify-content: space-between; padding: 8px 5px; border-bottom: 1px solid #2a3a4a; font-size: 13px; }
+
+.notification { position: fixed; top: 20px; left: 50%; transform: translateX(-50%) translateY(-100px); background: #2ecc71; color: #000; padding: 12px 24px; border-radius: 10px; font-weight: bold; z-index: 1000; transition: transform 0.3s ease; font-size: 14px; }
+.notification.show { transform: translateX(-50%) translateY(0); }
+.notification.error { background: #e74c3c; color: #fff; }
+
+/* Firebase Status */
+.firebase-status {
+    position: fixed;
+    bottom: 10px;
+    right: 10px;
+    padding: 5px 10px;
+    border-radius: 5px;
+    font-size: 11px;
+    background: rgba(0,0,0,0.7);
+    z-index: 999;
+}
+.firebase-status.connected { color: #2ecc71; }
+.firebase-status.disconnected { color: #e74c3c; }
+
+@media (max-width: 400px) {
+    .multiplier-display { font-size: 56px; }
+    .game-area { height: 280px; }    .countdown-timer { font-size: 64px; }
+    .airplane svg { width: 50px; }
+}
+</style>
+</head>
+<body>
+
+<div class="notification" id="notification"></div>
+
+<!-- Firebase Status Indicator -->
+<div class="firebase-status disconnected" id="firebaseStatus">🔴 Firebase Disconnected</div>
+
+<div class="top-bar">
+    <div class="balance-display">
+        <span>🪙</span>
+        <span id="topBalance">৳0.00</span>
+    </div>
+</div>
+
+<div class="aviator-header">
+    <div class="aviator-logo">Aviator</div>
+    <div class="balance-bdt" id="headerBalance">0.00 BDT</div>
+</div>
+
+<div class="history-bar" id="historyBar"></div>
+
+<div class="game-area" id="gameArea">
+    <div class="rays" id="rays"></div>
+    <canvas class="trail-canvas" id="trailCanvas"></canvas>
+
+    <div class="countdown-overlay hidden" id="countdownOverlay">
+        <div class="countdown-label">পরবর্তী রাউন্ড শুরু হচ্ছে</div>
+        <div class="countdown-timer" id="countdownTimer">5</div>
+        <div class="countdown-sublabel" id="countdownSublabel">⏰ বেট ধরুন!</div>
+    </div>
+    <div class="countdown-progress" id="countdownProgress" style="width: 100%;"></div>
+
+    <div class="multiplier-display hidden" id="multiplierDisplay">1.00x</div>
+    
+    <div class="airplane" id="airplane" style="left: 20px; bottom: 20px;">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+            <path d="M498.1 5.6c10.1 7 15.4 19.1 13.5 31.2l-64 416c-1.5 9.7-7.4 18.2-16 23s-18.9 5.4-28 1.6L284 427.7l-68.5 74.1c-8.9 9.7-22.9 12.9-35.2 8.1S160 493.2 160 480V396.4c0-4 1.5-7.8 4.2-10.7L331.8 202.8c5.8-6.3 5.6-16-.4-22s-15.7-6.4-22-.7L106 360.8 17.7 316.6C7.1 311.3 .3 300.7 0 288.9s5.9-22.8 16.1-28.7l448-256c10.7-6.1 23.9-5.5 34 1.4z"/>
+        </svg>
+    </div>
+</div>
+
+<div class="betting-section">
+    <div class="bet-panel">
+        <div class="bet-panel-body">
+            <div class="bet-controls">                <div class="amount-display">
+                    <button class="amount-btn" onclick="changeAmount(-1)">−</button>
+                    <span class="amount-value" id="amount1">10.00</span>
+                    <button class="amount-btn" onclick="changeAmount(1)">+</button>
+                </div>
+                <div class="quick-amounts">
+                    <button class="quick-amount-btn" onclick="setAmount(10)">10</button>
+                    <button class="quick-amount-btn" onclick="setAmount(50)">50</button>
+                    <button class="quick-amount-btn" onclick="setAmount(100)">100</button>
+                    <button class="quick-amount-btn" onclick="setAmount(500)">500</button>
+                </div>
+            </div>
+            <button class="bet-button bet-green" id="betBtn1" onclick="handleBetAction()">
+                <span class="bet-label">Bet</span>
+                <span class="bet-amount-text" id="betBtnText1">10.00 BDT</span>
+            </button>
+        </div>
+    </div>
+</div>
+
+<div class="bets-list" id="betsList"></div>
+
+<!-- Firebase SDK -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getDatabase, ref, set, get, update, onValue, push } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+// Firebase Configuration
+const firebaseConfig = {
+    apiKey: "AIzaSyCxSQPZajiRQRe30n4LsiZYjjWchETK9hg",
+    authDomain: "planning-with-ai-3ab22.firebaseapp.com",
+    projectId: "planning-with-ai-3ab22",
+    storageBucket: "planning-with-ai-3ab22.firebasestorage.app",
+    messagingSenderId: "645443175167",
+    appId: "1:645443175167:web:83b0953d1b1ea2a115c2ca"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const database = getDatabase(app);
+
+// Make Firebase available globally
+window.firebaseApp = app;
+window.firebaseDatabase = database;
+window.firebaseConnected = true;
+
+// Update status indicator
+document.getElementById('firebaseStatus').className = 'firebase-status connected';
+document.getElementById('firebaseStatus').textContent = '🟢 Firebase Connected';
+// Firebase Functions
+window.saveBalanceToFirebase = function(userId, balance) {
+    if (!window.firebaseConnected || !userId) return;
+    
+    const userRef = ref(database, 'users/' + userId);
+    update(userRef, {
+        balance: balance,
+        lastUpdated: Date.now()
+    }).catch(error => {
+        console.error('Error saving balance:', error);
+    });
+};
+
+window.saveTransactionToFirebase = function(userId, transaction) {
+    if (!window.firebaseConnected || !userId) return;
+    
+    const transactionsRef = ref(database, 'transactions/' + userId);
+    const newTransactionRef = push(transactionsRef);
+    set(newTransactionRef, {
+        ...transaction,
+        timestamp: Date.now()
+    }).catch(error => {
+        console.error('Error saving transaction:', error);
+    });
+};
+
+window.listenToBalanceChanges = function(userId, callback) {
+    if (!window.firebaseConnected || !userId) return;
+    
+    const userRef = ref(database, 'users/' + userId);
+    onValue(userRef, (snapshot) => {
+        const data = snapshot.val();
+        if (data && data.balance !== undefined) {
+            callback(data.balance);
+        }
+    });
+};
+
+window.createUserInFirebase = function(userId, username, initialBalance = 0) {
+    if (!window.firebaseConnected || !userId) return;
+    
+    const userRef = ref(database, 'users/' + userId);
+    set(userRef, {
+        username: username,
+        balance: initialBalance,
+        createdAt: Date.now(),
+        lastUpdated: Date.now()
+    }).catch(error => {
+        console.error('Error creating user:', error);
+    });};
+
+console.log('✅ Firebase initialized successfully');
+</script>
+
+<script>
+// ============ GAME STATE ============
+let balance = 0;
+let betAmount = 10;
+let betState = 'idle';
+let currentMultiplier = 1.00;
+let gamePhase = 'waiting';
+let crashPoint = 0;
+let history = [];
+let animFrame = null;
+let trailPoints = [];
+let totalWinAmount = 0;
+let fakePlayers = [];
+let connectedUserId = null;
+let connectedUsername = 'Player';
+let firebaseListenerActive = false;
+
+const WAITING_TIME = 5;
+const FLY_SPEED = 0.06;
+
+// ============ INIT ============
+window.onload = function() {
+    // Wait for Firebase to initialize
+    setTimeout(() => {
+        generateHistory();
+        renderHistory();
+        createRays();
+        generateFakePlayers();
+        renderBetsList();
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+        connectToParentSite();
+        startGameLoop();
+    }, 500);
+};
+
+// ============ PARENT SITE CONNECTION ============
+function connectToParentSite() {
+    // Request user data from parent site
+    if (window.parent && window.parent !== window) {
+        window.parent.postMessage({ type: 'GET_USER_DATA' }, '*');
+    }
+    
+    // Listen for messages from parent
+    window.addEventListener('message', function(event) {        if (!event.data) return;
+        
+        if (event.data.type === 'USER_DATA_RESPONSE') {
+            balance = parseFloat(event.data.balance) || 0;
+            connectedUserId = event.data.userId || 'guest_' + Math.random().toString(36).substr(2, 9);
+            connectedUsername = event.data.username || 'Player';
+            
+            updateBalanceUI();
+            showNotification('✅ কানেক্টেড: ' + connectedUsername);
+            
+            // Create or update user in Firebase
+            if (window.createUserInFirebase) {
+                window.createUserInFirebase(connectedUserId, connectedUsername, balance);
+            }
+            
+            // Start listening to Firebase for balance changes
+            startFirebaseListener();
+        }
+        
+        if (event.data.type === 'BALANCE_UPDATE') {
+            balance = parseFloat(event.data.balance) || 0;
+            updateBalanceUI();
+            
+            // Save to Firebase
+            if (window.saveBalanceToFirebase && connectedUserId) {
+                window.saveBalanceToFirebase(connectedUserId, balance);
+            }
+        }
+    });
+}
+
+function startFirebaseListener() {
+    if (!connectedUserId || firebaseListenerActive) return;
+    
+    if (window.listenToBalanceChanges) {
+        window.listenToBalanceChanges(connectedUserId, (newBalance) => {
+            // Only update if balance changed from external source
+            if (Math.abs(newBalance - balance) > 0.01) {
+                balance = newBalance;
+                updateBalanceUI();
+                console.log('Balance updated from Firebase:', newBalance);
+            }
+        });
+        firebaseListenerActive = true;
+    }
+}
+
+function notifyParentBalanceChange() {
+    if (window.parent && window.parent !== window) {
+        window.parent.postMessage({            type: 'GAME_BALANCE_UPDATE',
+            userId: connectedUserId,
+            balance: balance
+        }, '*');
+    }
+    
+    // Save to Firebase
+    if (window.saveBalanceToFirebase && connectedUserId) {
+        window.saveBalanceToFirebase(connectedUserId, balance);
+    }
+}
+
+function saveTransaction(type, amount, multiplier = null) {
+    if (!window.saveTransactionToFirebase || !connectedUserId) return;
+    
+    const transaction = {
+        type: type,
+        amount: amount,
+        multiplier: multiplier
+    };
+    
+    window.saveTransactionToFirebase(connectedUserId, transaction);
+}
+
+function updateBalanceUI() {
+    document.getElementById('topBalance').textContent = '৳' + balance.toFixed(2);
+    document.getElementById('headerBalance').textContent = balance.toFixed(2) + ' BDT';
+}
+
+// ============ HISTORY ============
+function generateHistory() {
+    history = [2.05, 18.40, 14.16, 9.56, 9.88, 21.18, 8.74, 1.67, 1.12, 2.87, 1.28, 3.38];
+}
+
+function renderHistory() {
+    const bar = document.getElementById('historyBar');
+    bar.innerHTML = '';
+    history.forEach(val => {
+        const item = document.createElement('div');
+        item.className = 'history-item ' + (val < 2 ? 'low' : val < 10 ? 'medium' : 'high');
+        item.textContent = val.toFixed(2) + 'x';
+        bar.appendChild(item);
+    });
+}
+
+function addToHistory(val) {
+    history.unshift(val);
+    if (history.length > 30) history.pop();
+    renderHistory();
+}
+// ============ RAYS ============
+function createRays() {
+    const container = document.getElementById('rays');
+    container.innerHTML = '';
+    for (let i = 0; i < 20; i++) {
+        const ray = document.createElement('div');
+        ray.className = 'ray';
+        ray.style.transform = `rotate(${-10 - i * 5}deg)`;
+        container.appendChild(ray);
+    }
+}
+
+// ============ CANVAS ============
+function resizeCanvas() {
+    const canvas = document.getElementById('trailCanvas');
+    const area = document.getElementById('gameArea');
+    canvas.width = area.clientWidth;
+    canvas.height = area.clientHeight;
+}
+
+function drawTrail() {
+    const canvas = document.getElementById('trailCanvas');
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (trailPoints.length < 2) return;
+
+    const gradient = ctx.createLinearGradient(0, canvas.height, canvas.width, 0);
+    gradient.addColorStop(0, '#e74c3c');
+    gradient.addColorStop(0.5, '#f39c12');
+    gradient.addColorStop(1, '#2ecc71');
+
+    ctx.beginPath();
+    ctx.moveTo(trailPoints[0].x, trailPoints[0].y);
+    for (let i = 1; i < trailPoints.length; i++) {
+        ctx.lineTo(trailPoints[i].x, trailPoints[i].y);
+    }
+    ctx.strokeStyle = gradient;
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    ctx.lineTo(trailPoints[trailPoints.length - 1].x, canvas.height);
+    ctx.lineTo(trailPoints[0].x, canvas.height);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(231, 76, 60, 0.1)';
+    ctx.fill();
+}
+
+function clearCanvas() {
+    const canvas = document.getElementById('trailCanvas');    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+}
+
+// ============ FAKE PLAYERS ============
+function generateFakePlayers() {
+    const names = ['Rahim*', 'Karim*', 'Jamil*', 'Nasir*', 'Hasan*', 'Kamal*', 'Babul*', 'Abdul*', 'Salam*', 'Rafiq*'];
+    const avatars = ['🦊', '🐺', '🐸', '🐼', '🐨', '🐲', '⭐', '💎', '🎯', '🔥'];
+    fakePlayers = [];
+    for (let i = 0; i < 12; i++) {
+        fakePlayers.push({
+            name: names[i % names.length] + Math.floor(Math.random() * 99),
+            avatar: avatars[i % avatars.length],
+            bet: (Math.random() * 500 + 10).toFixed(2),
+            cashout: null,
+            color: ['#e74c3c', '#3498db', '#2ecc71', '#f39c12', '#9b59b6'][i % 5]
+        });
+    }
+}
+
+function renderBetsList() {
+    const list = document.getElementById('betsList');
+    list.innerHTML = '';
+    const allBets = [...fakePlayers];
+    
+    if (betState === 'placed' || betState === 'cashed') {
+        allBets.unshift({
+            name: 'You',
+            avatar: '👤',
+            bet: betAmount.toFixed(2),
+            cashout: betState === 'cashed' ? currentMultiplier.toFixed(2) + 'x' : null,
+            color: '#2ecc71'
+        });
+    }
+
+    allBets.forEach(p => {
+        const row = document.createElement('div');
+        row.className = 'bet-row';
+        row.innerHTML = `
+            <div style="display:flex;align-items:center;gap:8px;">
+                <span>${p.avatar}</span>
+                <span>${p.name}</span>
+                <span style="color:#aaa;">${parseFloat(p.bet).toFixed(2)} BDT</span>
+            </div>
+            <span style="color:${p.cashout ? '#2ecc71' : '#f39c12'};font-weight:bold;">
+                ${p.cashout || '...'}
+            </span>`;
+        list.appendChild(row);
+    });
+}
+// ============ BET CONTROLS ============
+function changeAmount(delta) {
+    if (betState !== 'idle') return;
+    betAmount = Math.max(10, betAmount + delta);
+    updateAmountDisplay();
+}
+
+function setAmount(amount) {
+    if (betState !== 'idle') return;
+    betAmount = amount;
+    updateAmountDisplay();
+}
+
+function updateAmountDisplay() {
+    document.getElementById('amount1').textContent = betAmount.toFixed(2);
+    document.getElementById('betBtnText1').textContent = betAmount.toFixed(2) + ' BDT';
+}
+
+// ============ BET HANDLING ============
+function handleBetAction() {
+    if (gamePhase === 'flying') {
+        if (betState === 'placed') {
+            cashOut();
+        }
+        return;
+    }
+
+    if (gamePhase === 'crashed') {
+        showNotification('রাউন্ড শেষ! অপেক্ষা করুন।', true);
+        return;
+    }
+
+    if (gamePhase === 'waiting') {
+        if (betState === 'idle') {
+            placeBet();
+        } else if (betState === 'placed') {
+            cancelBet();
+        }
+    }
+}
+
+function placeBet() {
+    if (gamePhase !== 'waiting') {
+        showNotification('এখন বেট ধরা যাবে না!', true);
+        return;
+    }
+
+    if (balance < betAmount) {
+        showNotification('পর্যাপ্ত ব্যালেন্স নেই!', true);        return;
+    }
+
+    balance -= betAmount;
+    betState = 'placed';
+    updateBalanceUI();
+    notifyParentBalanceChange();
+    
+    // Save transaction to Firebase
+    saveTransaction('bet', betAmount);
+
+    const btn = document.getElementById('betBtn1');
+    btn.className = 'bet-button bet-orange';
+    btn.innerHTML = `
+        <span class="bet-label">⏳ Waiting...</span>
+        <span class="bet-amount-text">Cancel</span>`;
+
+    showNotification('✅ বেট ধরা হয়েছে: ' + betAmount.toFixed(2) + ' BDT');
+    renderBetsList();
+}
+
+function cancelBet() {
+    if (betState !== 'placed') return;
+    if (gamePhase !== 'waiting') {
+        showNotification('উড়ান শুরু হয়েছে!', true);
+        return;
+    }
+
+    balance += betAmount;
+    betState = 'idle';
+    updateBalanceUI();
+    notifyParentBalanceChange();
+    
+    // Save transaction to Firebase
+    saveTransaction('cancel', betAmount);
+
+    const btn = document.getElementById('betBtn1');
+    btn.className = 'bet-button bet-green';
+    btn.innerHTML = `
+        <span class="bet-label">Bet</span>
+        <span class="bet-amount-text">${betAmount.toFixed(2)} BDT</span>`;
+
+    showNotification('বেট ক্যান্সেল হয়েছে');
+    renderBetsList();
+}
+
+function cashOut() {
+    if (betState !== 'placed') return;
+    if (gamePhase !== 'flying') return;
+    const winAmount = betAmount * currentMultiplier;
+    balance += winAmount;
+    totalWinAmount += winAmount;
+    betState = 'cashed';
+    updateBalanceUI();
+    notifyParentBalanceChange();
+    
+    // Save transaction to Firebase
+    saveTransaction('win', winAmount, currentMultiplier);
+    
+    const btn = document.getElementById('betBtn1');
+    btn.className = 'bet-button bet-green';
+    btn.innerHTML = `
+        <span class="bet-label">🎉 Won!</span>
+        <span class="bet-amount-text">${winAmount.toFixed(2)} BDT</span>`;
+
+    showNotification('🎉 ' + currentMultiplier.toFixed(2) + 'x! জিতেছেন: ' + winAmount.toFixed(2) + ' BDT');
+    renderBetsList();
+}
+
+// ============ NOTIFICATION ============
+function showNotification(msg, isError = false) {
+    const notif = document.getElementById('notification');
+    notif.textContent = msg;
+    notif.className = 'notification show' + (isError ? ' error' : '');
+    setTimeout(() => notif.classList.remove('show'), 2500);
+}
+
+// ============ GAME LOOP ============
+function startGameLoop() {
+    startWaitingPhase();
+}
+
+function startWaitingPhase() {
+    gamePhase = 'waiting';
+    currentMultiplier = 1.00;
+    trailPoints = [];
+
+    const display = document.getElementById('multiplierDisplay');
+    display.textContent = '1.00x';
+    display.className = 'multiplier-display hidden';
+
+    const airplane = document.getElementById('airplane');
+    airplane.style.left = '20px';
+    airplane.style.bottom = '20px';
+    airplane.classList.remove('flying');
+
+    clearCanvas();
+
+    if (betState === 'cashed' || betState === 'lost') {        betState = 'idle';
+    }
+    
+    const btn = document.getElementById('betBtn1');
+    btn.className = 'bet-button bet-green';
+    btn.innerHTML = `
+        <span class="bet-label">Bet</span>
+        <span class="bet-amount-text">${betAmount.toFixed(2)} BDT</span>`;
+    
+    generateFakePlayers();
+    renderBetsList();
+    startCountdown();
+}
+
+function startCountdown() {
+    const overlay = document.getElementById('countdownOverlay');
+    const timerEl = document.getElementById('countdownTimer');
+    const sublabel = document.getElementById('countdownSublabel');
+    const progress = document.getElementById('countdownProgress');
+    const display = document.getElementById('multiplierDisplay');
+
+    overlay.classList.remove('hidden');
+    display.className = 'multiplier-display hidden';
+    
+    let countdownValue = WAITING_TIME;
+    timerEl.textContent = countdownValue;
+    sublabel.className = 'countdown-sublabel';
+    sublabel.textContent = '⏰ বেট ধরুন!';
+    progress.style.width = '100%';
+
+    const interval = setInterval(() => {
+        countdownValue--;
+        timerEl.textContent = countdownValue;
+        progress.style.width = (countdownValue / WAITING_TIME * 100) + '%';
+
+        if (countdownValue <= 2) {
+            sublabel.className = 'countdown-sublabel urgent';
+            sublabel.textContent = '⚠️ মাত্র ' + countdownValue + ' সেকেন্ড!';
+        }
+
+        if (countdownValue <= 0) {
+            clearInterval(interval);
+            overlay.classList.add('hidden');
+            progress.style.width = '0%';
+            display.className = 'multiplier-display flying';
+
+            if (betState === 'idle') {
+                const btn = document.getElementById('betBtn1');
+                btn.className = 'bet-button bet-gray';
+                btn.innerHTML = `                    <span class="bet-label">🚫 সময় শেষ</span>
+                    <span class="bet-amount-text">পরবর্তী রাউন্ড</span>`;
+            }
+
+            startFlyingPhase();
+        }
+    }, 1000);
+}
+
+function startFlyingPhase() {
+    gamePhase = 'flying';
+    crashPoint = generateCrashPoint();
+
+    const display = document.getElementById('multiplierDisplay');
+    const airplane = document.getElementById('airplane');
+    airplane.classList.add('flying');
+
+    let startTime = Date.now();
+    const canvas = document.getElementById('trailCanvas');
+    const area = document.getElementById('gameArea');
+
+    function animate() {
+        if (gamePhase !== 'flying') return;
+
+        const elapsed = (Date.now() - startTime) / 1000;
+        currentMultiplier = Math.pow(Math.E, FLY_SPEED * elapsed);
+        currentMultiplier = Math.round(currentMultiplier * 100) / 100;
+
+        display.textContent = currentMultiplier.toFixed(2) + 'x';
+
+        const progress = Math.min((currentMultiplier - 1) / Math.max(crashPoint - 1, 1) * 0.85, 0.92);
+        const areaWidth = canvas.width;
+        const areaHeight = canvas.height;
+
+        const planeX = 20 + progress * (areaWidth - 100);
+        const planeY = 20 + progress * (areaHeight - 80);
+
+        airplane.style.left = planeX + 'px';
+        airplane.style.bottom = planeY + 'px';
+
+        trailPoints.push({ x: planeX + 30, y: areaHeight - planeY });
+        drawTrail();
+
+        if (betState === 'placed') {
+            const btn = document.getElementById('betBtn1');
+            btn.querySelector('.bet-amount-text').textContent = (betAmount * currentMultiplier).toFixed(2) + ' BDT';
+        }
+
+        fakePlayers.forEach(p => {
+            if (!p.cashout && Math.random() < 0.015 && currentMultiplier > 1.1) {                p.cashout = currentMultiplier.toFixed(2) + 'x';
+            }
+        });
+
+        if (currentMultiplier >= crashPoint) {
+            crash();
+            return;
+        }
+
+        animFrame = requestAnimationFrame(animate);
+    }
+
+    animFrame = requestAnimationFrame(animate);
+}
+
+function generateCrashPoint() {
+    const r = Math.random();
+    if (r < 0.04) return 1.00;
+    return Math.max(1.01, Math.round((0.96 / (1 - r)) * 100) / 100);
+}
+
+function crash() {
+    gamePhase = 'crashed';
+    cancelAnimationFrame(animFrame);
+
+    const display = document.getElementById('multiplierDisplay');
+    display.textContent = currentMultiplier.toFixed(2) + 'x';
+    display.className = 'multiplier-display crashed';
+
+    const airplane = document.getElementById('airplane');
+    airplane.classList.remove('flying');
+
+    if (betState === 'placed') {
+        betState = 'lost';
+        const btn = document.getElementById('betBtn1');
+        btn.className = 'bet-button bet-red';
+        btn.innerHTML = `
+            <span class="bet-label">💥 Lost</span>
+            <span class="bet-amount-text">-${betAmount.toFixed(2)} BDT</span>`;
+        
+        // Save loss transaction
+        saveTransaction('loss', betAmount);
+    }
+
+    addToHistory(currentMultiplier);
+    renderBetsList();
+    showNotification('💥 CRASHED at ' + currentMultiplier.toFixed(2) + 'x!', true);
+    
+    setTimeout(() => startWaitingPhase(), 3000);
+}</script>
+</body>
+</html>
